@@ -5,13 +5,15 @@ use std::process::Command;
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
+
     let out_dir = env::var("OUT_DIR").unwrap();
     let bpf_dir = "bpf";
     let vmlinux_h_path = format!("{}/vmlinux.h", bpf_dir);
     let bpf_c_file = format!("{}/uprober.bpf.c", bpf_dir);
     let bpf_o_file = format!("{}/uprober.bpf.o", out_dir);
+    let skel_rs_file = format!("{}/uprober.skel.rs", out_dir);
 
-    // Step 1: Generate vmlinux.h if missing
+    // Generate vmlinux.h
     if !Path::new(&vmlinux_h_path).exists() {
         println!("Generating vmlinux.h...");
         let output = Command::new("bpftool")
@@ -36,7 +38,8 @@ fn main() {
         }
     }
 
-    // Step 2: Compile the eBPF program
+    // Compile eBPF program
+    fs::create_dir_all(&out_dir).unwrap();
     println!("Compiling eBPF program...");
     let status = Command::new("clang")
         .args([
@@ -58,19 +61,17 @@ fn main() {
         std::process::exit(1);
     }
 
-    // Step 3: Strip debug symbols
-    println!("Stripping eBPF binary...");
-    let status = Command::new("llvm-strip")
-        .args(["-g", &bpf_o_file])
+    // Generate skel.rs
+    println!("Generating uprober.skel.rs...");
+    let status = Command::new("libbpf-cargo")
+        .args(["gen", &bpf_o_file, "-o", &skel_rs_file])
         .status()
-        .expect("Failed to strip eBPF binary");
+        .expect("Failed to generate skeleton");
 
     if !status.success() {
-        eprintln!("Failed to strip eBPF binary");
+        eprintln!("Failed to generate skeleton");
         std::process::exit(1);
     }
 
-    // Tell Cargo to watch for changes in the eBPF source files
     println!("cargo:rerun-if-changed={}", bpf_c_file);
-    println!("cargo:rerun-if-changed={}", vmlinux_h_path);
 }
