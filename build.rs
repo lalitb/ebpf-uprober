@@ -9,7 +9,7 @@ fn main() {
     let bpf_dir = "bpf";
     let vmlinux_h_path = format!("{}/vmlinux.h", bpf_dir);
     let bpf_c_file = format!("{}/uprober.bpf.c", bpf_dir);
-    let bpf_o_file = format!("{}/out/uprober.bpf.o", out_dir);
+    let bpf_o_file = format!("{}/uprober.bpf.o", out_dir);
 
     // Step 1: Generate vmlinux.h if missing
     if !Path::new(&vmlinux_h_path).exists() {
