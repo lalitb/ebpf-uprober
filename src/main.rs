@@ -5,6 +5,7 @@ use std::fs::File;
 use std::path::Path;
 use std::process::Command;
 use libbpf_rs::skel::OpenSkel;
+use std::os::fd::AsRawFd;
 
 include!(concat!(env!("OUT_DIR"), "/uprober.skel.rs"));
 
