@@ -4,6 +4,7 @@ use std::path::Path;
 use std::process::Command;
 
 fn main() {
+    println!("cargo:rerun-if-changed=build.rs");
     let out_dir = env::var("OUT_DIR").unwrap();
     let bpf_dir = "bpf";
     let vmlinux_h_path = format!("{}/vmlinux.h", bpf_dir);
