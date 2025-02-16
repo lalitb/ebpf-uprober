@@ -13,7 +13,7 @@ fn main() {
     let bpf_o_file = format!("{}/uprober.bpf.o", out_dir);
     let skel_rs_file = format!("{}/uprober.skel.rs", out_dir);
 
-    println!("OUT_DIR: {}", out_dir);   
+    println!("OUT_DIR: {}", out_dir);
 
     // Generate vmlinux.h
     if !Path::new(&vmlinux_h_path).exists() {
@@ -63,10 +63,9 @@ fn main() {
         std::process::exit(1);
     }
 
-    // Generate skel.rs
     println!("Generating uprober.skel.rs...");
     let status = Command::new("cargo-libbpf")
-        .args(["gen", &bpf_o_file, "-o", &skel_rs_file])
+        .args(["libbpf", "gen", &bpf_o_file, "-o", &skel_rs_file])
         .status()
         .expect("Failed to generate skeleton");
 
