@@ -1,6 +1,9 @@
+use libbpf_rs::skel::SkelBuilder;
+use libbpf_rs::UprobeOpts;
 use libbpf_rs::{MapFlags, OpenObject};
 use std::path::Path;
 use std::process::Command;
+
 include!(concat!(env!("OUT_DIR"), "/uprober.skel.rs"));
 
 fn main() {
