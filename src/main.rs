@@ -4,6 +4,7 @@ use libbpf_rs::{MapFlags, OpenObject};
 use std::fs::File;
 use std::path::Path;
 use std::process::Command;
+use libbpf_rs::skel::OpenSkel;
 
 include!(concat!(env!("OUT_DIR"), "/uprober.skel.rs"));
 
