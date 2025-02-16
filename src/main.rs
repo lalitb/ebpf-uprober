@@ -13,16 +13,23 @@ fn main() {
     skel.load().expect("Failed to load skeleton");
 
     let bash_path = Path::new("/bin/bash");
+    // Open the binary to get a file descriptor
+    let file = File::open(bash_path).expect("Failed to open binary");
+    let binary_fd = file.as_raw_fd(); // Get the raw file descriptor
 
-    skel.progs_mut()
-        .uprobe_readline()
-        .attach_uprobe_opts(UprobeOpts {
-            binary_path: bash_path.to_string_lossy().into_owned(),
-            func_offset: 0,
-            func_name: "readline".into(),
-            retprobe: false, // false for entry, true for return probes
-            pid: None,
-        })
+    let uprobe = skel.progs_mut().uprobe_readline();
+
+    let opts = UprobeOpts {
+        func_name: "readline".into(), // Function name inside the binary
+        retprobe: false,              // false for entry, true for return probes
+        ref_ctr_offset: 0,
+        cookie: 0,
+        _non_exhaustive: (),
+    };
+
+    // Attach the uprobe using the binary's file descriptor
+    uprobe
+        .attach_uprobe_opts(binary_fd, 0, opts) // 0 is the function offset
         .expect("Failed to attach uprobe");
 
     println!("Uprobe attached! Now start /bin/bash and type a command.");
