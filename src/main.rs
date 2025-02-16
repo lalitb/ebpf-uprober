@@ -11,7 +11,7 @@ include!(concat!(env!("OUT_DIR"), "/uprober.skel.rs"));
 
 fn main() {
     let skel_builder = UproberSkelBuilder::default();
-    let mut skel = skel_builder.open_skeleton().expect("Failed to open skeleton");
+    let mut skel = skel_builder.open().expect("Failed to open skeleton");
 
     skel.load().expect("Failed to load skeleton");
 
