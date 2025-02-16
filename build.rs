@@ -64,18 +64,17 @@ fn main() {
     }
 
     println!("Generating uprober.skel.rs...");
-    let status = Command::new("cargo-libbpf")
+    let output = Command::new("cargo-libbpf")
         .args(["libbpf", "gen", "--object", &bpf_o_file])
-        .status()
+        .output()
         .expect("Failed to generate skeleton");
 
-    // Move the output to the correct location
-    if status.success() {
-        let generated_skel = format!("{}/{}.rs", out_dir, "uprober.skel");
-        fs::rename(&generated_skel, &skel_rs_file)
-            .expect("Failed to move generated skeleton to expected location");
+    if output.status.success() {
+        fs::write(&skel_rs_file, output.stdout)
+            .expect("Failed to write generated skeleton to file");
+        println!("Successfully generated {}", skel_rs_file);
     } else {
-        eprintln!("Failed to generate skeleton");
+        eprintln!("Failed to generate skeleton: {:?}", output.stderr);
         std::process::exit(1);
     }
 
