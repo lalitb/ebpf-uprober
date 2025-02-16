@@ -1,6 +1,7 @@
 use libbpf_rs::skel::SkelBuilder;
 use libbpf_rs::UprobeOpts;
 use libbpf_rs::{MapFlags, OpenObject};
+use std::fs::File;
 use std::path::Path;
 use std::process::Command;
 
