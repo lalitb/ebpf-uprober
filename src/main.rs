@@ -11,7 +11,7 @@ include!(concat!(env!("OUT_DIR"), "/uprober.skel.rs"));
 
 fn main() {
     let skel_builder = UproberSkelBuilder::default();
-    let mut skel = skel_builder.open().expect("Failed to open skeleton");
+    let mut skel = skel_builder.open_skeleton().expect("Failed to open skeleton");
 
     skel.load().expect("Failed to load skeleton");
 
@@ -20,7 +20,7 @@ fn main() {
     let file = File::open(bash_path).expect("Failed to open binary");
     let binary_fd = file.as_raw_fd(); // Get the raw file descriptor
 
-    let uprobe = skel.progs_mut().uprobe_readline();
+    let uprobe = skel.progs().uprobe_readline();
 
     let opts = UprobeOpts {
         func_name: "readline".into(), // Function name inside the binary
