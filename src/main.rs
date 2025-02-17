@@ -58,7 +58,7 @@ fn main() {
     println!("Loading skeleton...");
     let skel = open_skel.load().expect("Failed to load skeleton");
 
-    let uprobe = skel.progs.uprobe_test_function();
+    let uprobe = skel.progs.uprobe_test_function;
 
     // Print program info for debugging
     println!("Program name: {:?}", uprobe.name());
