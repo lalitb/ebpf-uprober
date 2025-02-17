@@ -36,8 +36,10 @@ fn main() {
     let bash_path = Path::new("/bin/bash");
 
     // Get the actual offset of readline
-    let readline_offset =
-        get_symbol_offset(bash_path, "readline").expect("Failed to find readline symbol offset");
+    //let readline_offset =
+    //    get_symbol_offset(bash_path, "readline").expect("Failed to find readline symbol offset");
+
+    let readline_offset: usize = 0;
 
     println!("Found readline at offset: 0x{:x}", readline_offset);
 
@@ -65,8 +67,6 @@ fn main() {
         cookie: 0,
         _non_exhaustive: (),
     };
-    // TODO
-    let readline_offset = 0xe4e70;
 
     println!("Attaching uprobe at offset 0x{:x}...", readline_offset);
     let _ = uprobe
