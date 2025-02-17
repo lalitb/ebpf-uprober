@@ -65,6 +65,8 @@ fn main() {
         cookie: 0,
         _non_exhaustive: (),
     };
+    // TODO
+    let readline_offset = 0xe4e70;
 
     println!("Attaching uprobe at offset 0x{:x}...", readline_offset);
     let _ = uprobe
