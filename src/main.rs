@@ -35,7 +35,7 @@ fn main() {
     let uprobe = skel.progs.uprobe_readline;
 
     // Print program info
-    println!("Program name: {}", uprobe.name());
+    println!("Program name: {:?}", uprobe.name());
     println!("Program type: {:?}", uprobe.prog_type());
 
     let opts = UprobeOpts {
