@@ -1,9 +1,7 @@
 use libbpf_rs::skel::OpenSkel;
 use libbpf_rs::skel::SkelBuilder;
 use libbpf_rs::UprobeOpts;
-use std::fs::File;
 use std::mem::MaybeUninit;
-use std::os::fd::AsRawFd;
 use std::path::Path;
 use std::process::Command;
 
@@ -13,15 +11,15 @@ fn main() {
     let skel_builder = UproberSkelBuilder::default();
     let mut open_obj = MaybeUninit::uninit();
 
-    let mut open_skel = skel_builder
+    let open_skel = skel_builder
         .open(&mut open_obj)
         .expect("Failed to open skeleton");
 
-    let mut skel = open_skel.load().expect("Failed to load skeleton");
+    let skel = open_skel.load().expect("Failed to load skeleton");
 
     let bash_path = Path::new("/bin/bash");
 
-    let &uprobe = skel.progs.uprobe_readline;
+    let uprobe = skel.progs.uprobe_readline;
 
     let opts = UprobeOpts {
         func_name: "readline".into(), // Function name inside the binary
@@ -32,7 +30,7 @@ fn main() {
     };
 
     // Attach the uprobe using the binary's file descriptor
-    uprobe
+    let _ = uprobe
         .attach_uprobe_with_opts(-1, bash_path, 0, opts) // 0 is the function offset
         .expect("Failed to attach uprobe");
 
