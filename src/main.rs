@@ -7,17 +7,39 @@ use std::mem::MaybeUninit;
 use std::path::Path;
 use std::process::Command;
 
-use signal_hook::consts::SIGINT;
-use signal_hook::flag;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-use std::thread;
-use std::time::Duration;
-
 include!(concat!(env!("OUT_DIR"), "/uprober.skel.rs"));
 
+fn get_symbol_offset(binary_path: &Path, symbol_name: &str) -> Option<u64> {
+    let output = Command::new("nm")
+        .arg("-D")
+        .arg(binary_path)
+        .output()
+        .ok()?;
+
+    let output_str = String::from_utf8_lossy(&output.stdout);
+    for line in output_str.lines() {
+        if line.contains(symbol_name) {
+            // Parse the hex offset from the nm output
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 3 {
+                return u64::from_str_radix(parts[0], 16).ok();
+            }
+        }
+    }
+    None
+}
+
 fn main() {
+    // Enable verbose logging
     std::env::set_var("LIBBPF_DEBUG", "1");
+
+    let bash_path = Path::new("/bin/bash");
+
+    // Get the actual offset of readline
+    let readline_offset =
+        get_symbol_offset(bash_path, "readline").expect("Failed to find readline symbol offset");
+
+    println!("Found readline at offset: 0x{:x}", readline_offset);
 
     let skel_builder = UproberSkelBuilder::default();
     let mut open_obj = MaybeUninit::uninit();
@@ -30,57 +52,60 @@ fn main() {
     println!("Loading skeleton...");
     let skel = open_skel.load().expect("Failed to load skeleton");
 
-    let bash_path = Path::new("/bin/bash");
-
     let uprobe = skel.progs.uprobe_readline;
 
-    // Print program info
-    println!("Program name: {:?}", uprobe.name());
+    // Print program info for debugging
+    println!("Program name: {}", uprobe.name());
     println!("Program type: {:?}", uprobe.prog_type());
 
     let opts = UprobeOpts {
-        func_name: "readline".into(), // Function name inside the binary
-        retprobe: false,              // false for entry, true for return probes
+        func_name: "readline".into(),
+        retprobe: false,
         ref_ctr_offset: 0,
         cookie: 0,
         _non_exhaustive: (),
     };
 
-    // Attach the uprobe using the binary's file descriptor
-    println!("Attaching uprobe...");
+    println!("Attaching uprobe at offset 0x{:x}...", readline_offset);
     let _ = uprobe
-        .attach_uprobe_with_opts(-1, bash_path, 0, opts) // 0 is the function offset
+        .attach_uprobe_with_opts(-1, bash_path, readline_offset, opts)
         .expect("Failed to attach uprobe");
 
-    println!("Uprobe attached! Now start /bin/bash and type a command.");
-    /*loop {
-        Command::new("bpftool")
-            .arg("prog")
-            .arg("tracelog")
-            .status()
-            .expect("Failed to read BPF logs");
-    }*/
-    // Open the trace_pipe file
-    /*let file =
-        File::open("/sys/kernel/debug/tracing/trace_pipe").expect("Failed to open trace_pipe");
-    let reader = BufReader::new(file);
+    println!("Uprobe attached successfully!");
 
-    // Read and print each line from trace_pipe
-    for line in reader.lines() {
-        match line {
-            Ok(log) => println!("{}", log),
-            Err(e) => eprintln!("Error reading line: {}", e),
-        }
-    }*/
-    // Set up a flag to handle SIGINT (Ctrl+C) for graceful shutdown
-    let running = Arc::new(AtomicBool::new(true));
-    let r = running.clone();
-    flag::register(SIGINT, r).expect("Failed to set up signal handler");
-
-    // Keep the program running until SIGINT is received
-    while running.load(Ordering::Relaxed) {
-        thread::sleep(Duration::from_secs(1));
+    // Try to verify the attachment
+    if let Ok(output) = Command::new("cat")
+        .arg("/sys/kernel/debug/tracing/uprobe_events")
+        .output()
+    {
+        println!("Current uprobe events:");
+        println!("{}", String::from_utf8_lossy(&output.stdout));
     }
 
-    println!("Exiting...");
+    // Read both trace and trace_pipe
+    println!("Monitoring traces...");
+    let trace_pipe = std::thread::spawn(|| {
+        let files = vec![
+            "/sys/kernel/debug/tracing/trace",
+            "/sys/kernel/debug/tracing/trace_pipe",
+        ];
+
+        for file_path in files {
+            if let Ok(file) = File::open(file_path) {
+                println!("Reading from {}", file_path);
+                let reader = BufReader::new(file);
+                for line in reader.lines() {
+                    if let Ok(log) = line {
+                        println!("[{}] {}", file_path, log);
+                    }
+                }
+            }
+        }
+    });
+
+    // Keep the program running
+    println!("Press Ctrl+C to exit...");
+    loop {
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
 }
