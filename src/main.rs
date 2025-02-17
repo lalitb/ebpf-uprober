@@ -7,6 +7,13 @@ use std::mem::MaybeUninit;
 use std::path::Path;
 use std::process::Command;
 
+use signal_hook::consts::SIGINT;
+use signal_hook::flag;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
+
 include!(concat!(env!("OUT_DIR"), "/uprober.skel.rs"));
 
 fn main() {
@@ -45,7 +52,7 @@ fn main() {
             .expect("Failed to read BPF logs");
     }*/
     // Open the trace_pipe file
-    let file =
+    /*let file =
         File::open("/sys/kernel/debug/tracing/trace_pipe").expect("Failed to open trace_pipe");
     let reader = BufReader::new(file);
 
@@ -55,5 +62,16 @@ fn main() {
             Ok(log) => println!("{}", log),
             Err(e) => eprintln!("Error reading line: {}", e),
         }
+    }*/
+    // Set up a flag to handle SIGINT (Ctrl+C) for graceful shutdown
+    let running = Arc::new(AtomicBool::new(true));
+    let r = running.clone();
+    flag::register(SIGINT, r).expect("Failed to set up signal handler");
+
+    // Keep the program running until SIGINT is received
+    while running.load(Ordering::Relaxed) {
+        thread::sleep(Duration::from_secs(1));
     }
+
+    println!("Exiting...");
 }
