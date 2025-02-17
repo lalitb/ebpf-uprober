@@ -39,7 +39,9 @@ fn main() {
     //let readline_offset =
     //    get_symbol_offset(bash_path, "readline").expect("Failed to find readline symbol offset");
 
-    let readline_offset: usize = 0xe4e70; // Use actual offset from objdump
+    //let readline_offset: usize = 0xe4e70; // Use actual offset from objdump
+    let readline_offset: usize = 0xb1e70; // Adjusted file-based offset
+
 
     println!("Found readline at offset: 0x{:x}", readline_offset);
 
