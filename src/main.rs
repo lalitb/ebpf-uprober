@@ -33,17 +33,19 @@ fn main() {
     // Enable verbose logging
     std::env::set_var("LIBBPF_DEBUG", "1");
 
-    let bash_path = Path::new("/bin/bash");
+    let test_program_path = Path::new("./test_program");
 
     // Get the actual offset of readline
-    //let readline_offset =
-    //    get_symbol_offset(bash_path, "readline").expect("Failed to find readline symbol offset");
+    let test_function_offset =
+        get_symbol_offset(test_program_path, "test_function").expect("Failed to find test_function symbol offset");
 
-    let readline_offset: usize = 0xe4e70; // Use actual offset from objdump
+    //let readline_offset: usize = 0xe4e70; // Use actual offset from objdump
     //let readline_offset: usize = 0xb1e70; // Adjusted file-based offset
+    //let test_function_offset: usize = 0x1169;
 
 
-    println!("Found readline at offset: 0x{:x}", readline_offset);
+
+    println!("Found readline at offset: 0x{:x}", test_function_offset);
 
     let skel_builder = UproberSkelBuilder::default();
     let mut open_obj = MaybeUninit::uninit();
@@ -56,7 +58,7 @@ fn main() {
     println!("Loading skeleton...");
     let skel = open_skel.load().expect("Failed to load skeleton");
 
-    let uprobe = skel.progs.uprobe_readline;
+    let uprobe = skel.progs.uprobe_test_function;
 
     // Print program info for debugging
     println!("Program name: {:?}", uprobe.name());
@@ -70,9 +72,9 @@ fn main() {
         _non_exhaustive: (),
     };
 
-    println!("Attaching uprobe at offset 0x{:x}...", readline_offset);
+    println!("Attaching uprobe at offset 0x{:x}...", test_function_offset);
     let _ = uprobe
-        .attach_uprobe_with_opts(-1, bash_path, readline_offset, opts)
+        .attach_uprobe_with_opts(-1, test_program_path, test_function_offset, opts)
         .expect("Failed to attach uprobe");
 
     println!("Uprobe attached successfully!");
