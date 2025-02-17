@@ -1,11 +1,11 @@
+use libbpf_rs::skel::OpenSkel;
 use libbpf_rs::skel::SkelBuilder;
 use libbpf_rs::UprobeOpts;
 use std::fs::File;
+use std::mem::MaybeUninit;
+use std::os::fd::AsRawFd;
 use std::path::Path;
 use std::process::Command;
-use libbpf_rs::skel::OpenSkel;
-use std::os::fd::AsRawFd;
-use std::mem::MaybeUninit;
 
 include!(concat!(env!("OUT_DIR"), "/uprober.skel.rs"));
 
@@ -17,15 +17,11 @@ fn main() {
         .open(&mut open_obj)
         .expect("Failed to open skeleton");
 
-
     let mut skel = open_skel.load().expect("Failed to load skeleton");
 
     let bash_path = Path::new("/bin/bash");
-    // Open the binary to get a file descriptor
-    let file = File::open(bash_path).expect("Failed to open binary");
-    let binary_fd = file.as_raw_fd(); // Get the raw file descriptor
 
-    let uprobe = skel.progs().uprobe_readline();
+    let &uprobe = skel.progs.uprobe_readline;
 
     let opts = UprobeOpts {
         func_name: "readline".into(), // Function name inside the binary
@@ -37,7 +33,7 @@ fn main() {
 
     // Attach the uprobe using the binary's file descriptor
     uprobe
-        .attach_uprobe_opts(binary_fd, 0, opts) // 0 is the function offset
+        .attach_uprobe_with_opts(-1, bash_path, 0, opts) // 0 is the function offset
         .expect("Failed to attach uprobe");
 
     println!("Uprobe attached! Now start /bin/bash and type a command.");
