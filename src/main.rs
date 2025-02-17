@@ -17,18 +17,26 @@ use std::time::Duration;
 include!(concat!(env!("OUT_DIR"), "/uprober.skel.rs"));
 
 fn main() {
+    std::env::set_var("LIBBPF_DEBUG", "1");
+
     let skel_builder = UproberSkelBuilder::default();
     let mut open_obj = MaybeUninit::uninit();
 
+    println!("Opening skeleton...");
     let open_skel = skel_builder
         .open(&mut open_obj)
         .expect("Failed to open skeleton");
 
+    println!("Loading skeleton...");
     let skel = open_skel.load().expect("Failed to load skeleton");
 
     let bash_path = Path::new("/bin/bash");
 
     let uprobe = skel.progs.uprobe_readline;
+
+    // Print program info
+    println!("Program name: {}", uprobe.name());
+    println!("Program type: {:?}", uprobe.prog_type());
 
     let opts = UprobeOpts {
         func_name: "readline".into(), // Function name inside the binary
@@ -39,6 +47,7 @@ fn main() {
     };
 
     // Attach the uprobe using the binary's file descriptor
+    println!("Attaching uprobe...");
     let _ = uprobe
         .attach_uprobe_with_opts(-1, bash_path, 0, opts) // 0 is the function offset
         .expect("Failed to attach uprobe");
