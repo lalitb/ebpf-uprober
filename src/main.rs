@@ -9,7 +9,7 @@ use std::process::Command;
 
 include!(concat!(env!("OUT_DIR"), "/uprober.skel.rs"));
 
-fn get_symbol_offset(binary_path: &Path, symbol_name: &str) -> Option<u64> {
+fn get_symbol_offset(binary_path: &Path, symbol_name: &str) -> Option<usize> {
     let output = Command::new("nm")
         .arg("-D")
         .arg(binary_path)
@@ -22,7 +22,7 @@ fn get_symbol_offset(binary_path: &Path, symbol_name: &str) -> Option<u64> {
             // Parse the hex offset from the nm output
             let parts: Vec<&str> = line.split_whitespace().collect();
             if parts.len() >= 3 {
-                return u64::from_str_radix(parts[0], 16).ok();
+                return u64::from_str_radix(parts[0], 16).ok().map(|x| x as usize);
             }
         }
     }
@@ -55,7 +55,7 @@ fn main() {
     let uprobe = skel.progs.uprobe_readline;
 
     // Print program info for debugging
-    println!("Program name: {}", uprobe.name());
+    println!("Program name: {:?}", uprobe.name());
     println!("Program type: {:?}", uprobe.prog_type());
 
     let opts = UprobeOpts {
