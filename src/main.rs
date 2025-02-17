@@ -65,7 +65,7 @@ fn main() {
     println!("Program type: {:?}", uprobe.prog_type());
 
     let opts = UprobeOpts {
-        func_name: "readline".into(),
+        func_name: "test_function".into(),
         retprobe: false,
         ref_ctr_offset: 0,
         cookie: 0,
