@@ -10,6 +10,7 @@ use std::process::Command;
 include!(concat!(env!("OUT_DIR"), "/uprober.skel.rs"));
 
 fn get_symbol_offset(binary_path: &Path, symbol_name: &str) -> Option<usize> {
+    println!("Getting offset for symbol: {:?} inside {:?}", symbol_name, binary_path.display());
     let output = Command::new("nm")
         .arg("-D")
         .arg(binary_path)
