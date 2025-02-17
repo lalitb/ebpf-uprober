@@ -34,7 +34,7 @@ fn main() {
     // Enable verbose logging
     std::env::set_var("LIBBPF_DEBUG", "1");
 
-    let test_program_path = Path::new("~/test_program");
+    let test_program_path = Path::new("/tmp/test_program");
     // Get the actual offset of readline
     let test_function_offset =
         get_symbol_offset(test_program_path, "test_function").expect("Failed to find test_function symbol offset");
