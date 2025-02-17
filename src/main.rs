@@ -35,17 +35,12 @@ fn main() {
     std::env::set_var("LIBBPF_DEBUG", "1");
 
     let test_program_path = Path::new("/tmp/test_program");
-    // Get the actual offset of readline
+    // Get the actual offset of test_function
     let test_function_offset =
         get_symbol_offset(test_program_path, "test_function").expect("Failed to find test_function symbol offset");
 
-    //let readline_offset: usize = 0xe4e70; // Use actual offset from objdump
-    //let readline_offset: usize = 0xb1e70; // Adjusted file-based offset
-    //let test_function_offset: usize = 0x1169;
 
-
-
-    println!("Found readline at offset: 0x{:x}", test_function_offset);
+    println!("Found test_function at offset: 0x{:x}", test_function_offset);
 
     let skel_builder = UproberSkelBuilder::default();
     let mut open_obj = MaybeUninit::uninit();
