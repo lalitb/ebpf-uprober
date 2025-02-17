@@ -1,6 +1,8 @@
 use libbpf_rs::skel::OpenSkel;
 use libbpf_rs::skel::SkelBuilder;
 use libbpf_rs::UprobeOpts;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
 use std::mem::MaybeUninit;
 use std::path::Path;
 use std::process::Command;
@@ -35,11 +37,23 @@ fn main() {
         .expect("Failed to attach uprobe");
 
     println!("Uprobe attached! Now start /bin/bash and type a command.");
-    loop {
+    /*loop {
         Command::new("bpftool")
             .arg("prog")
             .arg("tracelog")
             .status()
             .expect("Failed to read BPF logs");
+    }*/
+    // Open the trace_pipe file
+    let file =
+        File::open("/sys/kernel/debug/tracing/trace_pipe").expect("Failed to open trace_pipe");
+    let reader = BufReader::new(file);
+
+    // Read and print each line from trace_pipe
+    for line in reader.lines() {
+        match line {
+            Ok(log) => println!("{}", log),
+            Err(e) => eprintln!("Error reading line: {}", e),
+        }
     }
 }
