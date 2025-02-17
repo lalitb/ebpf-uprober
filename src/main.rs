@@ -1,19 +1,24 @@
 use libbpf_rs::skel::SkelBuilder;
 use libbpf_rs::UprobeOpts;
-use libbpf_rs::{MapFlags, OpenObject};
 use std::fs::File;
 use std::path::Path;
 use std::process::Command;
 use libbpf_rs::skel::OpenSkel;
 use std::os::fd::AsRawFd;
+use std::mem::MaybeUninit;
 
 include!(concat!(env!("OUT_DIR"), "/uprober.skel.rs"));
 
 fn main() {
     let skel_builder = UproberSkelBuilder::default();
-    let mut skel = skel_builder.open().expect("Failed to open skeleton");
+    let mut open_obj = MaybeUninit::uninit();
 
-    skel.load().expect("Failed to load skeleton");
+    let mut open_skel = skel_builder
+        .open(&mut open_obj)
+        .expect("Failed to open skeleton");
+
+
+    let mut skel = open_skel.load().expect("Failed to load skeleton");
 
     let bash_path = Path::new("/bin/bash");
     // Open the binary to get a file descriptor
