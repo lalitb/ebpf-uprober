@@ -10,7 +10,11 @@ use std::process::Command;
 include!(concat!(env!("OUT_DIR"), "/uprober.skel.rs"));
 
 fn get_symbol_offset(binary_path: &Path, symbol_name: &str) -> Option<usize> {
-    println!("Getting offset for symbol: {:?} inside {:?}", symbol_name, binary_path.display());
+    println!(
+        "Getting offset for symbol: {:?} inside {:?}",
+        symbol_name,
+        binary_path.display()
+    );
     let output = Command::new("nm")
         .arg("-D")
         .arg(binary_path)
@@ -31,16 +35,19 @@ fn get_symbol_offset(binary_path: &Path, symbol_name: &str) -> Option<usize> {
 }
 
 fn main() {
+    let mut links = Vec::new();
     // Enable verbose logging
     std::env::set_var("LIBBPF_DEBUG", "1");
 
     let test_program_path = Path::new("/tmp/test_program");
     // Get the actual offset of test_function
-    let test_function_offset =
-        get_symbol_offset(test_program_path, "test_function").expect("Failed to find test_function symbol offset");
+    let test_function_offset = get_symbol_offset(test_program_path, "test_function")
+        .expect("Failed to find test_function symbol offset");
 
-
-    println!("Found test_function at offset: 0x{:x}", test_function_offset);
+    println!(
+        "Found test_function at offset: 0x{:x}",
+        test_function_offset
+    );
 
     let skel_builder = UproberSkelBuilder::default();
     let mut open_obj = MaybeUninit::uninit();
@@ -68,9 +75,10 @@ fn main() {
     };
 
     println!("Attaching uprobe at offset 0x{:x}...", test_function_offset);
-    let _ = uprobe
+    let uprobe_link = uprobe
         .attach_uprobe_with_opts(-1, test_program_path, test_function_offset, opts)
         .expect("Failed to attach uprobe");
+    links.push(uprobe_link);
 
     println!("Uprobe attached successfully!");
 
