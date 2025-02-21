@@ -91,27 +91,6 @@ fn main() {
         println!("{}", String::from_utf8_lossy(&output.stdout));
     }
 
-    // Read both trace and trace_pipe
-    println!("Monitoring traces...");
-    let trace_pipe = std::thread::spawn(|| {
-        let files = vec![
-            "/sys/kernel/debug/tracing/trace",
-            "/sys/kernel/debug/tracing/trace_pipe",
-        ];
-
-        for file_path in files {
-            if let Ok(file) = File::open(file_path) {
-                println!("Reading from {}", file_path);
-                let reader = BufReader::new(file);
-                for line in reader.lines() {
-                    if let Ok(log) = line {
-                        println!("[{}] {}", file_path, log);
-                    }
-                }
-            }
-        }
-    });
-
     // Keep the program running
     println!("Press Ctrl+C to exit...");
     loop {
