@@ -40,14 +40,14 @@ fn main() {
     std::env::set_var("LIBBPF_DEBUG", "1");
 
     let test_program_path = Path::new("/tmp/test_program");
-    // Get the actual offset of test_function
+    /*// Get the actual offset of test_function
     let test_function_offset = get_symbol_offset(test_program_path, "test_function")
         .expect("Failed to find test_function symbol offset");
 
     println!(
         "Found test_function at offset: 0x{:x}",
         test_function_offset
-    );
+    );*/
 
     let skel_builder = UproberSkelBuilder::default();
     let mut open_obj = MaybeUninit::uninit();
