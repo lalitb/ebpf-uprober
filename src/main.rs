@@ -73,7 +73,7 @@ fn main() {
         cookie: 0,
         _non_exhaustive: (),
     };
-
+    let test_function_offset = 0; // This is the offset from the start of function.
     println!("Attaching uprobe at offset 0x{:x}...", test_function_offset);
     let uprobe_link = uprobe
         .attach_uprobe_with_opts(-1, test_program_path, test_function_offset, opts)
