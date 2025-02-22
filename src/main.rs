@@ -66,7 +66,6 @@ fn main() {
     println!("Program name: {:?}", uprobe.name());
     println!("Program type: {:?}", uprobe.prog_type());
 
-    
     let opts = UprobeOpts {
         func_name: "test_function".into(),
         retprobe: false,
@@ -81,16 +80,25 @@ fn main() {
         .expect("Failed to attach uprobe");
     links.push(uprobe_link);
 
-    println!("Uprobe attached successfully!");
+    // Attach uretprobe (return probe)
+    let retprobe_opts = UprobeOpts {
+        func_name: "test_function".into(),
+        retprobe: true, // Return probe
+        ref_ctr_offset: 0,
+        cookie: 0,
+        _non_exhaustive: (),
+    };
 
-    // Try to verify the attachment
-    if let Ok(output) = Command::new("cat")
-        .arg("/sys/kernel/debug/tracing/uprobe_events")
-        .output()
-    {
-        println!("Current uprobe events:");
-        println!("{}", String::from_utf8_lossy(&output.stdout));
-    }
+    println!(
+        "Attaching uretprobe at offset 0x{:x}...",
+        test_function_offset
+    );
+    let uretprobe_link = uprobe
+        .attach_uprobe_with_opts(-1, test_program_path, test_function_offset, retprobe_opts)
+        .expect("Failed to attach return uprobe");
+    links.push(uretprobe_link);
+
+    println!("Uprobe attached successfully!");
 
     // Keep the program running
     println!("Press Ctrl+C to exit...");
