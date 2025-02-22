@@ -66,6 +66,7 @@ fn main() {
     println!("Program name: {:?}", uprobe.name());
     println!("Program type: {:?}", uprobe.prog_type());
 
+    
     let opts = UprobeOpts {
         func_name: "test_function".into(),
         retprobe: false,
