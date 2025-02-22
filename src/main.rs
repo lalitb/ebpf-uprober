@@ -80,6 +80,10 @@ fn main() {
         .expect("Failed to attach uprobe");
     links.push(uprobe_link);
 
+    println!("Loading skeleton...");
+    let skel = open_skel.load().expect("Failed to load skeleton");
+
+    let uretprobe = skel.progs.uretprobe_test_function;
     // Attach uretprobe (return probe)
     let retprobe_opts = UprobeOpts {
         func_name: "test_function".into(),
@@ -93,9 +97,9 @@ fn main() {
         "Attaching uretprobe at offset 0x{:x}...",
         test_function_offset
     );
-    let uretprobe_link = uprobe
+    let uretprobe_link = uretprobe
         .attach_uprobe_with_opts(-1, test_program_path, test_function_offset, retprobe_opts)
-        .expect("Failed to attach return uprobe");
+        .expect("Failed to attach return uretprobe");
     links.push(uretprobe_link);
 
     println!("Uprobe attached successfully!");
