@@ -81,7 +81,6 @@ fn main() {
     links.push(uprobe_link);
 
     println!("Loading skeleton...");
-    let skel = open_skel.load().expect("Failed to load skeleton");
 
     let uretprobe = skel.progs.uretprobe_test_function;
     // Attach uretprobe (return probe)
