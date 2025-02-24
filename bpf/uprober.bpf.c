@@ -2,7 +2,7 @@
 
 #include <bpf/bpf_helpers.h>
 
-s// Define the span information structure
+// Define the span information structure
 struct span_info {
     __u64 start_time;
     __u64 end_time;
@@ -40,7 +40,7 @@ int uretprobe_test_function(struct pt_regs *ctx) {
     span = bpf_map_lookup_elem(&span_map, &pid_tid);
     if (span) {
         span->end_time = bpf_ktime_get_ns();
-        bpf_printk("Uretprobe hit: %s ended at %llu\n", 
+        bpf_printk("Uretprobe hit: %s ended at %llu duration %llu\n", 
             span->function_name, 
             span->end_time,
             span->end_time - span->start_time);
