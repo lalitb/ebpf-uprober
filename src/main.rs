@@ -6,8 +6,45 @@ use std::io::{BufRead, BufReader};
 use std::mem::MaybeUninit;
 use std::path::Path;
 use std::process::Command;
+use std::time::Duration;
 
 include!(concat!(env!("OUT_DIR"), "/uprober.skel.rs"));
+
+#[repr(C)]
+#[derive(Debug)]
+struct SpanInfo {
+    start_time: u64,
+    end_time: u64,
+    //function_name: [u8; 64], // Function name stored in C
+}
+
+
+// Function to process incoming span events from the ring buffer
+fn process_span_event(data: &[u8]) -> i32 {
+    println!("Processing span event...");
+    if data.len() != std::mem::size_of::<SpanInfo>() {
+        eprintln!("Invalid span event size: {}", data.len());
+        return -1;
+    }
+
+    let span_info: &SpanInfo = unsafe { &*(data.as_ptr() as *const SpanInfo) };
+
+    // Convert C-string to Rust String
+   /*  let function_name = String::from_utf8_lossy(&span_info.function_name)
+        .trim_end_matches('\0')
+        .to_string();*/
+
+    println!(
+        "Span Event - Function: , Start: {}, End: {}, Duration: {} ns",
+        //function_name,
+        span_info.start_time,
+        span_info.end_time,
+        span_info.end_time - span_info.start_time
+    );
+
+    0
+}
+
 
 fn get_symbol_offset(binary_path: &Path, symbol_name: &str) -> Option<usize> {
     println!(
@@ -48,6 +85,7 @@ fn main() {
         "Found test_function at offset: 0x{:x}",
         test_function_offset
     );*/
+    println!("Size of SpanInfo: {}", std::mem::size_of::<SpanInfo>());
 
     let skel_builder = UproberSkelBuilder::default();
     let mut open_obj = MaybeUninit::uninit();
@@ -102,10 +140,20 @@ fn main() {
     links.push(uretprobe_link);
 
     println!("Uprobe attached successfully!");
+    // Set up ring buffer
+    let mut builder = libbpf_rs::RingBufferBuilder::new();
+    builder
+        .add(&skel.maps.span_events, |data| process_span_event(data))
+        .expect("Failed to add ringbuf");
 
-    // Keep the program running
-    println!("Press Ctrl+C to exit...");
+    let ringbuf = builder.build().expect("Failed to create ring buffer");
+
+    // Start polling for span events
+    println!("Listening for span events... Press Ctrl+C to exit.");
     loop {
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        if let Err(e) = ringbuf.poll(Duration::from_secs(1)) {
+            eprintln!("Error polling ring buffer: {}", e);
+        }
     }
+    
 }
