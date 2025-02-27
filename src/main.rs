@@ -1,5 +1,6 @@
 use libbpf_rs::skel::OpenSkel;
 use libbpf_rs::skel::SkelBuilder;
+use libbpf_rs::MapCore;
 use libbpf_rs::UprobeOpts;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -15,9 +16,9 @@ include!(concat!(env!("OUT_DIR"), "/uprober.skel.rs"));
 struct SpanInfo {
     start_time: u64,
     end_time: u64,
-    //function_name: [u8; 64], // Function name stored in C
+    method_id: u64,
+    method_name: [u8; 64],
 }
-
 
 // Function to process incoming span events from the ring buffer
 fn process_span_event(data: &[u8]) -> i32 {
@@ -29,14 +30,14 @@ fn process_span_event(data: &[u8]) -> i32 {
 
     let span_info: &SpanInfo = unsafe { &*(data.as_ptr() as *const SpanInfo) };
 
-    // Convert C-string to Rust String
-   /*  let function_name = String::from_utf8_lossy(&span_info.function_name)
+    // Convert method_name from C string to Rust String
+    let method_name = String::from_utf8_lossy(&span_info.method_name)
         .trim_end_matches('\0')
-        .to_string();*/
+        .to_string();
 
     println!(
-        "Span Event - Function: , Start: {}, End: {}, Duration: {} ns",
-        //function_name,
+        "Span Event - Method: {}, Start: {}, End: {}, Duration: {} ns",
+        method_name,
         span_info.start_time,
         span_info.end_time,
         span_info.end_time - span_info.start_time
@@ -44,7 +45,6 @@ fn process_span_event(data: &[u8]) -> i32 {
 
     0
 }
-
 
 fn get_symbol_offset(binary_path: &Path, symbol_name: &str) -> Option<usize> {
     println!(
@@ -72,6 +72,13 @@ fn get_symbol_offset(binary_path: &Path, symbol_name: &str) -> Option<usize> {
 }
 
 fn main() {
+    let methods = [
+        (0, "first_function"),
+        (1, "second_function"),
+        (2, "third_function"),
+        // Add more methods as needed
+    ];
+
     let mut links = Vec::new();
     // Enable verbose logging
     std::env::set_var("LIBBPF_DEBUG", "1");
@@ -97,49 +104,64 @@ fn main() {
 
     println!("Loading skeleton...");
     let skel = open_skel.load().expect("Failed to load skeleton");
+    let method_names = skel.maps.method_names;
+    // Populate the method_names map
+    for (id, name) in methods.iter() {
+        let key: u32 = *id;
+        let mut value = [0u8; 64];
+        let name_bytes = name.as_bytes();
+        value[..name_bytes.len()].copy_from_slice(name_bytes);
+        method_names
+            .update(&key.to_le_bytes(), &value, libbpf_rs::MapFlags::ANY)
+            .expect("Failed to update method_names map");
+    }
 
     let uprobe = skel.progs.uprobe_test_function;
+    let uretprobe = skel.progs.uretprobe_test_function;
 
     // Print program info for debugging
     println!("Program name: {:?}", uprobe.name());
     println!("Program type: {:?}", uprobe.prog_type());
 
-    let opts = UprobeOpts {
-        func_name: "test_function".into(),
-        retprobe: false,
-        ref_ctr_offset: 0,
-        cookie: 0,
-        _non_exhaustive: (),
-    };
-    let test_function_offset = 0; // This is the offset from the start of function.
-    println!("Attaching uprobe at offset 0x{:x}...", test_function_offset);
-    let uprobe_link = uprobe
-        .attach_uprobe_with_opts(-1, test_program_path, test_function_offset, opts)
-        .expect("Failed to attach uprobe");
-    links.push(uprobe_link);
+    for (id, name) in methods.iter() {
+        println!("Method ID: {}, Name: {}", id, name);
 
-    println!("Loading skeleton...");
+        let opts = UprobeOpts {
+            func_name: (*name).into(),
+            retprobe: false,
+            ref_ctr_offset: 0,
+            cookie: *id as u64,
+            _non_exhaustive: (),
+        };
+        let test_function_offset = 0; // This is the offset from the start of function.
+        println!("Attaching uprobe at offset 0x{:x}...", test_function_offset);
+        let uprobe_link = uprobe
+            .attach_uprobe_with_opts(-1, test_program_path, test_function_offset, opts)
+            .expect("Failed to attach uprobe");
+        links.push(uprobe_link);
 
-    let uretprobe = skel.progs.uretprobe_test_function;
-    // Attach uretprobe (return probe)
-    let retprobe_opts = UprobeOpts {
-        func_name: "test_function".into(),
-        retprobe: true, // Return probe
-        ref_ctr_offset: 0,
-        cookie: 0,
-        _non_exhaustive: (),
-    };
+        println!("Loading skeleton...");
 
-    println!(
-        "Attaching uretprobe at offset 0x{:x}...",
-        test_function_offset
-    );
-    let uretprobe_link = uretprobe
-        .attach_uprobe_with_opts(-1, test_program_path, test_function_offset, retprobe_opts)
-        .expect("Failed to attach return uretprobe");
-    links.push(uretprobe_link);
+        // Attach uretprobe (return probe)
+        let retprobe_opts = UprobeOpts {
+            func_name: (*name).into(),
+            retprobe: true, // Return probe
+            ref_ctr_offset: 0,
+            cookie: *id as u64,
+            _non_exhaustive: (),
+        };
 
-    println!("Uprobe attached successfully!");
+        println!(
+            "Attaching uretprobe at offset 0x{:x}...",
+            test_function_offset
+        );
+        let uretprobe_link = uretprobe
+            .attach_uprobe_with_opts(-1, test_program_path, test_function_offset, retprobe_opts)
+            .expect("Failed to attach return uretprobe");
+        links.push(uretprobe_link);
+
+        println!("Uprobe attached successfully!");
+    }
     // Set up ring buffer
     let mut builder = libbpf_rs::RingBufferBuilder::new();
     builder
@@ -155,5 +177,4 @@ fn main() {
             eprintln!("Error polling ring buffer: {}", e);
         }
     }
-    
 }
