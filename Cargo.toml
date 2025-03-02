@@ -9,6 +9,10 @@ libbpf-sys = "1.2"
 anyhow = "1.0"
 signal-hook  = "0.3"
 
+opentelemetry = { version = "0.28.0" }
+opentelemetry_sdk = {version = "0.28.0"}
+opentelemetry-stdout = {version = "0.28.0"}
+
 [build-dependencies]
 libbpf-cargo = "0.24"
 

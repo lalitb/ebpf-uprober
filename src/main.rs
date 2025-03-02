@@ -2,12 +2,14 @@ use libbpf_rs::skel::OpenSkel;
 use libbpf_rs::skel::SkelBuilder;
 use libbpf_rs::MapCore;
 use libbpf_rs::UprobeOpts;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
+use opentelemetry::global;
+use opentelemetry::trace::{Span, SpanBuilder, SpanKind, Status, Tracer};
+use opentelemetry_sdk::trace::SdkTracerProvider;
 use std::mem::MaybeUninit;
 use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
+use std::time::UNIX_EPOCH;
 
 include!(concat!(env!("OUT_DIR"), "/uprober.skel.rs"));
 
@@ -34,6 +36,18 @@ fn process_span_event(data: &[u8]) -> i32 {
     let method_name = String::from_utf8_lossy(&span_info.method_name)
         .trim_end_matches('\0')
         .to_string();
+
+    let tracer = global::tracer("uprobes");
+    let start_time = UNIX_EPOCH + Duration::from_nanos(span_info.start_time);
+    let end_time = UNIX_EPOCH + Duration::from_nanos(span_info.end_time);
+
+    let span_builder = SpanBuilder::from_name(method_name.clone())
+        .with_kind(SpanKind::Internal)
+        .with_start_time(start_time)
+        .with_end_time(end_time)
+        .with_status(Status::Ok);
+    let mut span = tracer.build(span_builder);
+    span.end();
 
     println!(
         "Span Event - Method: {}, Start: {}, End: {}, Duration: {} ns",
@@ -72,6 +86,12 @@ fn get_symbol_offset(binary_path: &Path, symbol_name: &str) -> Option<usize> {
 }
 
 fn main() {
+    let exporter = opentelemetry_stdout::SpanExporter::default();
+    let tracer_provider = SdkTracerProvider::builder()
+        .with_simple_exporter(exporter)
+        .build();
+    global::set_tracer_provider(tracer_provider);
+
     let methods = [
         (0, "first_function"),
         (1, "second_function"),
