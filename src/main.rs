@@ -163,16 +163,25 @@ fn main() {
         .build();
     global::set_tracer_provider(tracer_provider);
 
+    // Use the **mangled** function names for Rust functions
+    //let methods = [
+    //    (0, "_ZN17test_rust_program14first_function17h7502165551f6ab00E"),
+    //    (1, "_ZN17test_rust_program15second_function17hbd069ec70d0fc6faE"),
+    //    (2, "_ZN17test_rust_program14third_function17h2c831bb585f38c96E"),
+    //];
     let methods = [
-        (0, "first_function"),
-        (1, "second_function"),
-        (2, "third_function"),
+        (0, "get_cpu_usage"),
+        (1, "get_memory_usage"),
+        (2, "get_disk_usage"),
+        (3, "get_network_usage"),
+        (4, "monitor_system"), // C++ function
     ];
 
     let mut links = Vec::new();
     std::env::set_var("LIBBPF_DEBUG", "1");
 
-    let test_program_path = Path::new("/tmp/test_program");
+    let test_program_path: &Path = Path::new("/tmp/monitor");
+    //let test_program_path: &Path = Path::new("/tmp/test_program");
 
     let skel_builder = UproberSkelBuilder::default();
     let mut open_obj = MaybeUninit::uninit();

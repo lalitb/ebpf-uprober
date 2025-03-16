@@ -63,6 +63,8 @@ int uprobe_test_function(struct pt_regs *ctx) {
     u64 start_time = bpf_ktime_get_ns();
     u64 method_id = bpf_get_attach_cookie(ctx);
 
+    bpf_printk("[UPROBE] Function called: method_id=%llu, pid_tgid=%llu", method_id, pid_tgid);
+
     struct trace_context *parent_ctx = bpf_map_lookup_elem(&context_map, &pid_tgid);
     struct trace_context new_ctx;
 
@@ -70,30 +72,36 @@ int uprobe_test_function(struct pt_regs *ctx) {
     struct start_data data = { .start_time = start_time, .method_id = method_id };
 
     if (parent_ctx) {
-        // ✅ Correctly inherit trace_id and link span to caller
+        // ✅ Inherit trace_id and correct parent_span_id from the existing context
         data.trace_id = parent_ctx->trace_id;
         data.parent_span_id = parent_ctx->span_id;
         new_ctx.trace_id = parent_ctx->trace_id;
-        new_ctx.span_id = ((__u64)bpf_get_prandom_u32()) << 32 | bpf_get_prandom_u32();
     } else {
-        // ✅ Root function call: Generate new trace_id and span_id
+        // ✅ Root function (monitor_system) starts a new trace
         data.trace_id = ((__u64)bpf_get_prandom_u32()) << 32 | bpf_get_prandom_u32();
         data.parent_span_id = 0;
         new_ctx.trace_id = data.trace_id;
-        new_ctx.span_id = ((__u64)bpf_get_prandom_u32()) << 32 | bpf_get_prandom_u32();
     }
 
-    data.span_id = new_ctx.span_id;
+    // ✅ Always assign a new span_id
+    data.span_id = ((__u64)bpf_get_prandom_u32()) << 32 | bpf_get_prandom_u32();
+    new_ctx.span_id = data.span_id;
 
-    // ✅ Store start time before updating context
+    bpf_printk("[UPROBE] Created span: trace_id=%llu, span_id=%llu, parent_span_id=%llu",
+               data.trace_id, data.span_id, data.parent_span_id);
+
+    // ✅ Store execution context but preserve root function's trace context separately
     bpf_map_update_elem(&start_times, &key, &data, BPF_ANY);
 
-    // ✅ Always update context_map, ensuring function calls maintain context
-    bpf_map_update_elem(&context_map, &pid_tgid, &new_ctx, BPF_ANY);
+    // ✅ Store in `context_map` only if it's a **root function** (monitor_system)
+    if (data.parent_span_id == 0) {
+        bpf_map_update_elem(&context_map, &pid_tgid, &new_ctx, BPF_ANY);
+        bpf_printk("[UPROBE] Stored root function context: trace_id=%llu, span_id=%llu",
+                   new_ctx.trace_id, new_ctx.span_id);
+    }
 
     return 0;
 }
-
 
 SEC("uretprobe")
 int uretprobe_test_function(struct pt_regs *ctx) {
@@ -125,13 +133,15 @@ int uretprobe_test_function(struct pt_regs *ctx) {
         bpf_probe_read_kernel(&span->method_name, sizeof(span->method_name), *name_ptr);
     }
 
-    // ✅ Submit the span event before modifying any context
+    // ✅ Submit the span event
     bpf_ringbuf_submit(span, 0);
 
-    // ✅ Only remove context if it's the root function
+    // ✅ Only remove context if it's NOT monitor_system
     struct trace_context *current_ctx = bpf_map_lookup_elem(&context_map, &pid_tgid);
     if (current_ctx && current_ctx->span_id == start_data_ptr->span_id) {
-        bpf_map_delete_elem(&context_map, &pid_tgid);
+        if (method_id != 4) { // 4 = monitor_system method_id
+            bpf_map_delete_elem(&context_map, &pid_tgid);
+        }
     }
 
     // ✅ Always delete from `start_times`
