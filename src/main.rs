@@ -48,8 +48,10 @@ fn process_span_event(data: &[u8]) -> i32 {
     let end_time = UNIX_EPOCH + Duration::from_nanos(span_info.end_time);
 
     // Convert trace_id (u64) into 16-byte TraceId
+    // ✅ Duplicate trace_id in both LSB and HSB
     let mut trace_id_bytes = [0u8; 16];
-    trace_id_bytes[8..].copy_from_slice(&span_info.trace_id.to_le_bytes());
+    trace_id_bytes[..8].copy_from_slice(&span_info.trace_id.to_le_bytes()); // HSB
+    trace_id_bytes[8..].copy_from_slice(&span_info.trace_id.to_le_bytes()); // LSB
 
     let span_id_bytes = span_info.span_id.to_le_bytes();
 
