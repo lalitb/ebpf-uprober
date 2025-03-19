@@ -7,6 +7,13 @@ struct trace_context {
     __u64 span_id;
 };
 
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 16); // Limit the number of root functions
+    __type(key, u64);  // Function ID
+    __type(value, u8);  // Flag indicating root function (1)
+} root_functions_map SEC(".maps");
+
 // BPF map to store trace context per process/thread
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
@@ -62,39 +69,47 @@ int uprobe_test_function(struct pt_regs *ctx) {
     u64 pid_tgid = bpf_get_current_pid_tgid();
     u64 start_time = bpf_ktime_get_ns();
     u64 method_id = bpf_get_attach_cookie(ctx);
+    u8 *is_root_function;
 
     bpf_printk("[UPROBE] Function called: method_id=%llu, pid_tgid=%llu", method_id, pid_tgid);
 
-    struct trace_context *parent_ctx = bpf_map_lookup_elem(&context_map, &pid_tgid);
-    struct trace_context new_ctx;
+    // Check if this function is configured as a root function
+    is_root_function = bpf_map_lookup_elem(&root_functions_map, &method_id);
 
+    struct trace_context new_ctx;
     struct start_key key = { .pid_tgid = pid_tgid, .method_id = method_id };
     struct start_data data = { .start_time = start_time, .method_id = method_id };
 
-    if (parent_ctx) {
-        // ✅ Inherit trace_id and correct parent_span_id from the existing context
-        data.trace_id = parent_ctx->trace_id;
-        data.parent_span_id = parent_ctx->span_id;
-        new_ctx.trace_id = parent_ctx->trace_id;
-    } else {
-        // ✅ Root function (monitor_system) starts a new trace
+    if (is_root_function) {
+        // ✅ New trace starts here!
         data.trace_id = ((__u64)bpf_get_prandom_u32()) << 32 | bpf_get_prandom_u32();
         data.parent_span_id = 0;
         new_ctx.trace_id = data.trace_id;
+        new_ctx.span_id = ((__u64)bpf_get_prandom_u32()) << 32 | bpf_get_prandom_u32();
+    } else {
+        // ✅ Inherit trace_id from parent
+        struct trace_context *parent_ctx = bpf_map_lookup_elem(&context_map, &pid_tgid);
+        if (parent_ctx) {
+            data.trace_id = parent_ctx->trace_id;
+            data.parent_span_id = parent_ctx->span_id;
+        } else {
+            data.trace_id = ((__u64)bpf_get_prandom_u32()) << 32 | bpf_get_prandom_u32();
+            data.parent_span_id = 0;
+        }
+        new_ctx.trace_id = data.trace_id;
+        new_ctx.span_id = ((__u64)bpf_get_prandom_u32()) << 32 | bpf_get_prandom_u32();
     }
 
-    // ✅ Always assign a new span_id
-    data.span_id = ((__u64)bpf_get_prandom_u32()) << 32 | bpf_get_prandom_u32();
-    new_ctx.span_id = data.span_id;
+    data.span_id = new_ctx.span_id;
 
     bpf_printk("[UPROBE] Created span: trace_id=%llu, span_id=%llu, parent_span_id=%llu",
                data.trace_id, data.span_id, data.parent_span_id);
 
-    // ✅ Store execution context but preserve root function's trace context separately
+    // ✅ Store execution context in start_times
     bpf_map_update_elem(&start_times, &key, &data, BPF_ANY);
 
-    // ✅ Store in `context_map` only if it's a **root function** (monitor_system)
-    if (data.parent_span_id == 0) {
+    // ✅ Store in `context_map` only for root functions
+    if (is_root_function) {
         bpf_map_update_elem(&context_map, &pid_tgid, &new_ctx, BPF_ANY);
         bpf_printk("[UPROBE] Stored root function context: trace_id=%llu, span_id=%llu",
                    new_ctx.trace_id, new_ctx.span_id);

@@ -155,6 +155,26 @@ impl ShouldSample for FilteringSampler {
     }
 }
 
+fn set_root_functions<T: MapCore>(root_functions: &[(&str, u64)], method_names: &T) {
+    for (name, method_id) in root_functions.iter() {
+        let key = *method_id;
+        let value: u8 = 1; // Mark as root function
+
+        method_names
+            .update(
+                &key.to_le_bytes(),
+                &value.to_le_bytes(),
+                libbpf_rs::MapFlags::ANY,
+            )
+            .expect(&format!("Failed to mark {} as root function", name));
+
+        println!(
+            "[DEBUG] Marked {} (method_id={}) as a root function",
+            name, method_id
+        );
+    }
+}
+
 fn main() {
     let exporter = opentelemetry_stdout::SpanExporter::default();
     let tracer_provider = SdkTracerProvider::builder()
@@ -177,6 +197,10 @@ fn main() {
         (4, "monitor_system"), // C++ function
     ];
 
+    let root_functions = [
+        ("monitor_system", 4), // Dynamically define which functions should start a new trace
+    ];
+
     let mut links = Vec::new();
     std::env::set_var("LIBBPF_DEBUG", "1");
 
@@ -191,6 +215,7 @@ fn main() {
         .expect("Failed to open skeleton");
 
     let skel = open_skel.load().expect("Failed to load skeleton");
+    set_root_functions(&root_functions, &skel.maps.root_functions_map);
     let method_names = skel.maps.method_names;
 
     // Populate the method_names map
