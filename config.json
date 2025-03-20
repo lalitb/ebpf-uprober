@@ -1,0 +1,15 @@
+{
+    "applications": [
+        {
+            "path": "/tmp/monitor",
+            "functions": [
+                { "id": 0, "name": "get_cpu_usage" },
+                { "id": 1, "name": "get_memory_usage" },
+                { "id": 2, "name": "get_disk_usage" },
+                { "id": 3, "name": "get_network_usage" },
+                { "id": 4, "name": "monitor_system" }
+            ],
+            "root_functions": ["monitor_system"]
+        }
+    ]
+}
