@@ -16,6 +16,27 @@ use std::path::Path;
 use std::process::Command;
 use std::time::{Duration, UNIX_EPOCH};
 
+use serde::Deserialize;
+use std::fs;
+
+#[derive(Debug, Deserialize)]
+struct FunctionConfig {
+    id: u64,
+    name: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ApplicationConfig {
+    path: String,
+    functions: Vec<FunctionConfig>,
+    root_functions: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Config {
+    applications: Vec<ApplicationConfig>,
+}
+
 include!(concat!(env!("OUT_DIR"), "/uprober.skel.rs"));
 
 #[repr(C)]
@@ -175,103 +196,117 @@ fn set_root_functions<T: MapCore>(root_functions: &[(&str, u64)], method_names: 
     }
 }
 
+fn load_config_from_args() -> Config {
+    let args: Vec<String> = std::env::args().collect();
+    let config_path = if args.len() > 1 {
+        &args[1] // Use the first argument as the config file path
+    } else {
+        "config.json" // Default to "config.json" in the current directory
+    };
+
+    println!("[INFO] Loading config from: {}", config_path);
+
+    let config_data = fs::read_to_string(config_path)
+        .unwrap_or_else(|_| panic!("Failed to read config file: {}", config_path));
+
+    serde_json::from_str(&config_data).expect("Failed to parse config JSON")
+}
+
 fn main() {
+    let config = load_config_from_args(); // Load config from argument or default location
+
     let exporter = opentelemetry_stdout::SpanExporter::default();
     let tracer_provider = SdkTracerProvider::builder()
-        .with_sampler(FilteringSampler) // Use the custom sampler here
+        .with_sampler(FilteringSampler)
         .with_simple_exporter(exporter)
         .build();
     global::set_tracer_provider(tracer_provider);
 
-    // Use the **mangled** function names for Rust functions
-    //let methods = [
-    //    (0, "_ZN17test_rust_program14first_function17h7502165551f6ab00E"),
-    //    (1, "_ZN17test_rust_program15second_function17hbd069ec70d0fc6faE"),
-    //    (2, "_ZN17test_rust_program14third_function17h2c831bb585f38c96E"),
-    //];
-    let methods = [
-        (0, "get_cpu_usage"),
-        (1, "get_memory_usage"),
-        (2, "get_disk_usage"),
-        (3, "get_network_usage"),
-        (4, "monitor_system"), // C++ function
-    ];
-
-    let root_functions = [
-        ("monitor_system", 4), // Dynamically define which functions should start a new trace
-    ];
-
     let mut links = Vec::new();
     std::env::set_var("LIBBPF_DEBUG", "1");
 
-    let test_program_path: &Path = Path::new("/tmp/monitor");
-    //let test_program_path: &Path = Path::new("/tmp/test_program");
+    for app in &config.applications {
+        let binary_path = Path::new(&app.path);
 
-    let skel_builder = UproberSkelBuilder::default();
-    let mut open_obj = MaybeUninit::uninit();
+        let skel_builder = UproberSkelBuilder::default();
+        let mut open_obj = MaybeUninit::uninit();
 
-    let open_skel = skel_builder
-        .open(&mut open_obj)
-        .expect("Failed to open skeleton");
+        let open_skel = skel_builder
+            .open(&mut open_obj)
+            .expect("Failed to open skeleton");
+        let skel = open_skel.load().expect("Failed to load skeleton");
 
-    let skel = open_skel.load().expect("Failed to load skeleton");
-    set_root_functions(&root_functions, &skel.maps.root_functions_map);
-    let method_names = skel.maps.method_names;
+        // Register root functions
+        let root_functions: Vec<(&str, u64)> = app
+            .root_functions
+            .iter()
+            .filter_map(|name| {
+                app.functions
+                    .iter()
+                    .find(|f| &f.name == name)
+                    .map(|f| (name.as_str(), f.id))
+            })
+            .collect();
+        set_root_functions(&root_functions, &skel.maps.root_functions_map);
 
-    // Populate the method_names map
-    for (id, name) in methods.iter() {
-        let key: u32 = *id;
-        let mut value = [0u8; 64];
-        let name_bytes = name.as_bytes();
-        value[..name_bytes.len()].copy_from_slice(name_bytes);
-        method_names
-            .update(&key.to_le_bytes(), &value, libbpf_rs::MapFlags::ANY)
-            .expect("Failed to update method_names map");
-    }
+        let method_names = &skel.maps.method_names;
 
-    let uprobe = skel.progs.uprobe_test_function;
-    let uretprobe = skel.progs.uretprobe_test_function;
+        // Populate method_names map
+        for func in &app.functions {
+            let key: u32 = func.id as u32;
+            let mut value = [0u8; 64];
+            let name_bytes = func.name.as_bytes();
+            value[..name_bytes.len()].copy_from_slice(name_bytes);
+            method_names
+                .update(&key.to_le_bytes(), &value, libbpf_rs::MapFlags::ANY)
+                .expect("Failed to update method_names map");
+        }
 
-    for (id, name) in methods.iter() {
-        let opts = UprobeOpts {
-            func_name: (*name).into(),
-            retprobe: false,
-            ref_ctr_offset: 0,
-            cookie: *id as u64,
-            _non_exhaustive: (),
-        };
-        let test_function_offset = 0;
-        let uprobe_link = uprobe
-            .attach_uprobe_with_opts(-1, test_program_path, test_function_offset, opts)
-            .expect("Failed to attach uprobe");
-        links.push(uprobe_link);
+        let uprobe = skel.progs.uprobe_test_function;
+        let uretprobe = skel.progs.uretprobe_test_function;
 
-        let retprobe_opts = UprobeOpts {
-            func_name: (*name).into(),
-            retprobe: true,
-            ref_ctr_offset: 0,
-            cookie: *id as u64,
-            _non_exhaustive: (),
-        };
+        for func in &app.functions {
+            let opts = UprobeOpts {
+                func_name: func.name.clone().into(),
+                retprobe: false,
+                ref_ctr_offset: 0,
+                cookie: func.id as u64,
+                _non_exhaustive: (),
+            };
+            let uprobe_link = uprobe
+                .attach_uprobe_with_opts(-1, binary_path, 0, opts)
+                .expect("Failed to attach uprobe");
+            links.push(uprobe_link);
 
-        let uretprobe_link = uretprobe
-            .attach_uprobe_with_opts(-1, test_program_path, test_function_offset, retprobe_opts)
-            .expect("Failed to attach return uretprobe");
-        links.push(uretprobe_link);
-    }
+            let retprobe_opts = UprobeOpts {
+                func_name: func.name.clone().into(),
+                retprobe: true,
+                ref_ctr_offset: 0,
+                cookie: func.id as u64,
+                _non_exhaustive: (),
+            };
+            let uretprobe_link = uretprobe
+                .attach_uprobe_with_opts(-1, binary_path, 0, retprobe_opts)
+                .expect("Failed to attach return uretprobe");
+            links.push(uretprobe_link);
+        }
 
-    // Set up ring buffer
-    let mut builder = libbpf_rs::RingBufferBuilder::new();
-    builder
-        .add(&skel.maps.span_events, |data| process_span_event(data))
-        .expect("Failed to add ringbuf");
+        // Set up ring buffer
+        let mut builder = libbpf_rs::RingBufferBuilder::new();
+        builder
+            .add(&skel.maps.span_events, |data| process_span_event(data))
+            .expect("Failed to add ringbuf");
 
-    let ringbuf = builder.build().expect("Failed to create ring buffer");
+        let ringbuf = builder.build().expect("Failed to create ring buffer");
 
-    println!("Listening for span events... Press Ctrl+C to exit.");
-    loop {
-        if let Err(e) = ringbuf.poll(Duration::from_secs(1)) {
-            eprintln!("Error polling ring buffer: {}", e);
+        println!(
+            "Listening for span events on {}... Press Ctrl+C to exit.",
+            app.path
+        );
+        loop {
+            if let Err(e) = ringbuf.poll(Duration::from_secs(1)) {
+                eprintln!("Error polling ring buffer for {}: {}", app.path, e);
+            }
         }
     }
 }
