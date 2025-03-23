@@ -70,8 +70,9 @@ int uprobe_test_function(struct pt_regs *ctx) {
     u64 start_time = bpf_ktime_get_ns();
     u64 method_id = bpf_get_attach_cookie(ctx);
     u8 *is_root_function;
-
+    
     bpf_printk("[UPROBE] Function called: method_id=%llu, pid_tgid=%llu", method_id, pid_tgid);
+    bpf_printk("[UPROBE] Start time: %llu", start_time);
 
     // Check if this function is configured as a root function
     is_root_function = bpf_map_lookup_elem(&root_functions_map, &method_id);
@@ -129,6 +130,9 @@ int uretprobe_test_function(struct pt_regs *ctx) {
     if (!start_data_ptr) {
         return 0;
     }
+    bpf_printk("[URETPROBE] Function returned: method_id=%llu, pid_tgid=%llu", method_id, pid_tgid);
+    bpf_printk("[URETPROBE] Start time: %llu", start_data_ptr->start_time);
+    bpf_printk("[URETPROBE] End time: %llu", end_time);
 
     struct span_info *span = bpf_ringbuf_reserve(&span_events, sizeof(struct span_info), 0);
     if (!span) {

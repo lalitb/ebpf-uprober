@@ -19,6 +19,29 @@ use std::time::{Duration, UNIX_EPOCH};
 use serde::Deserialize;
 use std::fs;
 
+use libc::{timespec, CLOCK_BOOTTIME, CLOCK_REALTIME};
+
+fn get_boot_time_ns() -> u64 {
+    let mut real_time = timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    let mut boot_time = timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+
+    unsafe {
+        libc::clock_gettime(CLOCK_REALTIME, &mut real_time);
+        libc::clock_gettime(CLOCK_BOOTTIME, &mut boot_time);
+    }
+
+    let real_time_ns = (real_time.tv_sec as u64) * 1_000_000_000 + (real_time.tv_nsec as u64);
+    let boot_time_ns = (boot_time.tv_sec as u64) * 1_000_000_000 + (boot_time.tv_nsec as u64);
+
+    real_time_ns - boot_time_ns
+}
+
 #[derive(Debug, Deserialize)]
 struct FunctionConfig {
     id: u64,
@@ -51,7 +74,7 @@ struct SpanInfo {
     method_name: [u8; 64],
 }
 
-fn process_span_event(data: &[u8]) -> i32 {
+fn process_span_event(data: &[u8], boot_time_offset: u64) -> i32 {
     if data.len() != std::mem::size_of::<SpanInfo>() {
         eprintln!("Invalid span event size: {}", data.len());
         return -1;
@@ -65,8 +88,8 @@ fn process_span_event(data: &[u8]) -> i32 {
         .to_string();
 
     let tracer = global::tracer("uprobes");
-    let start_time = UNIX_EPOCH + Duration::from_nanos(span_info.start_time);
-    let end_time = UNIX_EPOCH + Duration::from_nanos(span_info.end_time);
+    let start_time = UNIX_EPOCH + Duration::from_nanos(boot_time_offset + span_info.start_time);
+    let end_time = UNIX_EPOCH + Duration::from_nanos(boot_time_offset + span_info.end_time);
 
     // Convert trace_id (u64) into 16-byte TraceId
     // ✅ Duplicate trace_id in both LSB and HSB
@@ -215,6 +238,9 @@ fn load_config_from_args() -> Config {
 fn main() {
     let config = load_config_from_args(); // Load config from argument or default location
 
+    let boot_time_offset = get_boot_time_ns();
+    println!("[INFO] Boot time offset: {} ns", boot_time_offset);
+
     let exporter = opentelemetry_stdout::SpanExporter::default();
     let tracer_provider = SdkTracerProvider::builder()
         .with_sampler(FilteringSampler)
@@ -293,8 +319,12 @@ fn main() {
 
         // Set up ring buffer
         let mut builder = libbpf_rs::RingBufferBuilder::new();
+        let boot_time_offset_copy = boot_time_offset; // Copy for the closure
+
         builder
-            .add(&skel.maps.span_events, |data| process_span_event(data))
+            .add(&skel.maps.span_events, |data| {
+                process_span_event(data, boot_time_offset_copy)
+            })
             .expect("Failed to add ringbuf");
 
         let ringbuf = builder.build().expect("Failed to create ring buffer");
